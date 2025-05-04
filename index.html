@@ -100,6 +100,7 @@
     let currentPage = 1;
     let notes = JSON.parse(localStorage.getItem('notes') || '{}');
     let bookmarks = JSON.parse(localStorage.getItem('bookmarks') || '[]');
+    let arrowTarget = null; // Stores the point the arrow should point to
 
     function saveNotes() {
       localStorage.setItem('notes', JSON.stringify(notes));
@@ -197,6 +198,15 @@
 
         noteEl.querySelector('textarea').oninput = (e) => {
           note.text = e.target.value;
+          saveNotes();
+        };
+
+        noteEl.onclick = (e) => {
+          e.stopPropagation();
+          arrowTarget = { x: e.clientX, y: e.clientY };
+          note.arrowX = arrowTarget.x;
+          note.arrowY = arrowTarget.y;
+          updateArrow(arrow, note);
           saveNotes();
         };
 
