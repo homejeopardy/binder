@@ -6,95 +6,58 @@
   <title>Script Viewer</title>
   <style>
     html, body {
-      margin: 0;
-      padding: 0;
-      background: #111;
-      color: #fff;
-      height: 100%;
-      width: 100%;
-      overflow: hidden;
-      font-family: sans-serif;
+      margin: 0; padding: 0;
+      background: #111; color: #fff;
+      height: 100%; width: 100%;
+      overflow: hidden; font-family: sans-serif;
     }
-
     body.night-mode {
-      background: #eee;
-      color: #111;
+      background: #eee; color: #111;
     }
-
     #toolbar {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      z-index: 100;
+      position: absolute; top: 10px; left: 10px; z-index: 100;
       background: rgba(0, 0, 0, 0.6);
-      padding: 8px 12px;
-      border-radius: 8px;
-      display: flex;
-      gap: 10px;
-      align-items: center;
+      padding: 8px 12px; border-radius: 8px;
+      display: flex; gap: 10px; align-items: center;
     }
-
     #pdf-container {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100%;
-      gap: 2vw;
-      perspective: 2000px;
-      transition: transform 0.4s ease;
-      position: relative;
+      display: flex; justify-content: center; align-items: center;
+      height: 100%; gap: 2vw; perspective: 2000px;
+      transition: transform 0.4s ease; position: relative;
     }
-
     canvas {
-      max-height: 90vh;
-      max-width: 45vw;
+      max-height: 90vh; max-width: 45vw;
       background: white;
       box-shadow: 0 0 20px rgba(0,0,0,0.7);
       transition: transform 0.5s ease;
       cursor: pointer;
     }
-
     button, select {
-      background: #444;
-      border: none;
-      color: white;
-      padding: 6px 10px;
-      border-radius: 6px;
-      cursor: pointer;
+      background: #444; border: none;
+      color: white; padding: 6px 10px;
+      border-radius: 6px; cursor: pointer;
     }
-
     button:hover, select:hover {
       background: #666;
     }
-
     .note {
       position: absolute;
-      min-width: 150px;
-      min-height: 80px;
-      background: yellow;
-      color: black;
+      min-width: 150px; min-height: 80px;
+      background: yellow; color: black;
       border: 1px solid #444;
-      padding: 8px;
-      border-radius: 8px;
-      resize: both;
-      overflow: auto;
-      z-index: 90;
+      padding: 8px; border-radius: 8px;
+      resize: both; overflow: auto; z-index: 90;
       cursor: move;
     }
-
     .arrow {
       position: absolute;
-      width: 100px;
-      height: 2px;
+      width: 100px; height: 2px;
       background: red;
-      transform-origin: left center;
+      transform-origin: right center;
       z-index: 89;
     }
-
     .note textarea {
-      width: 100%;
-      height: 50px;
-      resize: none;
+      width: 100%; height: 50px; resize: none;
     }
   </style>
 </head>
@@ -120,13 +83,13 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script>
+    const container = document.getElementById('pdf-container');
     const fileInput = document.getElementById('fileInput');
     const fullscreenBtn = document.getElementById('fullscreenBtn');
     const nightModeBtn = document.getElementById('nightModeBtn');
     const bookmarkBtn = document.getElementById('bookmarkBtn');
-    const sceneSelector = document.getElementById('sceneSelector');
     const addNoteBtn = document.getElementById('addNoteBtn');
-    const container = document.getElementById('pdf-container');
+    const sceneSelector = document.getElementById('sceneSelector');
 
     const leftCanvas = document.getElementById('leftPage');
     const rightCanvas = document.getElementById('rightPage');
@@ -135,8 +98,16 @@
 
     let pdfDoc = null;
     let currentPage = 1;
-    let notes = {};
-    let bookmarks = [];
+    let notes = JSON.parse(localStorage.getItem('notes') || '{}');
+    let bookmarks = JSON.parse(localStorage.getItem('bookmarks') || '[]');
+
+    function saveNotes() {
+      localStorage.setItem('notes', JSON.stringify(notes));
+    }
+
+    function saveBookmarks() {
+      localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
+    }
 
     fullscreenBtn.onclick = () => {
       const el = document.documentElement;
@@ -150,6 +121,7 @@
     bookmarkBtn.onclick = () => {
       if (!bookmarks.includes(currentPage)) {
         bookmarks.push(currentPage);
+        saveBookmarks();
         alert('Bookmarked page ' + currentPage);
       }
     };
@@ -163,41 +135,82 @@
     };
 
     addNoteBtn.onclick = () => {
-      const note = document.createElement('div');
-      note.className = 'note';
-      note.style.left = '200px';
-      note.style.top = '200px';
-      note.innerHTML = `<textarea>Note</textarea><br><button onclick="addArrow(this)">➡️</button>`;
-      makeDraggable(note);
-      container.appendChild(note);
+      const id = 'note-' + Date.now();
+      const spread = currentPage;
+      const noteData = {
+        id, spread,
+        x: 200, y: 200, text: 'Note',
+        arrowX: 400, arrowY: 300
+      };
+      if (!notes[spread]) notes[spread] = [];
+      notes[spread].push(noteData);
+      saveNotes();
+      renderPagePair();
     };
 
-    function addArrow(btn) {
-      const note = btn.closest('.note');
-      const rect = note.getBoundingClientRect();
-      const arrow = document.createElement('div');
-      arrow.className = 'arrow';
-      arrow.style.left = (rect.left + rect.width / 2 - 50) + 'px';
-      arrow.style.top = (rect.top + rect.height / 2) + 'px';
-      arrow.style.transform = `rotate(45deg)`;
-      container.appendChild(arrow);
-    }
-
-    function makeDraggable(el) {
-      let offsetX, offsetY;
-      el.onmousedown = function (e) {
-        offsetX = e.clientX - el.offsetLeft;
-        offsetY = e.clientY - el.offsetTop;
+    function makeDraggable(noteEl, arrowEl, noteData) {
+      noteEl.onmousedown = function (e) {
+        const offsetX = e.clientX - noteEl.offsetLeft;
+        const offsetY = e.clientY - noteEl.offsetTop;
         document.onmousemove = function (e) {
-          el.style.left = (e.clientX - offsetX) + 'px';
-          el.style.top = (e.clientY - offsetY) + 'px';
+          noteEl.style.left = (e.clientX - offsetX) + 'px';
+          noteEl.style.top = (e.clientY - offsetY) + 'px';
+          noteData.x = parseInt(noteEl.style.left);
+          noteData.y = parseInt(noteEl.style.top);
+          updateArrow(arrowEl, noteData);
+          saveNotes();
         };
-        document.onmouseup = function () {
+        document.onmouseup = () => {
           document.onmousemove = null;
-          document.onmouseup = null;
         };
       };
     }
+
+    function updateArrow(arrow, noteData) {
+      const dx = noteData.arrowX - noteData.x;
+      const dy = noteData.arrowY - noteData.y;
+      const length = Math.sqrt(dx*dx + dy*dy);
+      const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+      arrow.style.width = length + 'px';
+      arrow.style.left = noteData.x + 'px';
+      arrow.style.top = noteData.y + 'px';
+      arrow.style.transform = `rotate(${angle}deg)`;
+    }
+
+    function renderNotesForSpread(spread) {
+      document.querySelectorAll('.note, .arrow').forEach(el => el.remove());
+      if (!notes[spread]) return;
+
+      notes[spread].forEach(note => {
+        const noteEl = document.createElement('div');
+        noteEl.className = 'note';
+        noteEl.style.left = note.x + 'px';
+        noteEl.style.top = note.y + 'px';
+        noteEl.innerHTML = `
+          <textarea>${note.text}</textarea>
+          <br>
+          <button onclick="this.parentElement.remove(); removeNote('${note.id}', ${spread})">🗑️</button>
+        `;
+        const arrow = document.createElement('div');
+        arrow.className = 'arrow';
+        updateArrow(arrow, note);
+
+        noteEl.querySelector('textarea').oninput = (e) => {
+          note.text = e.target.value;
+          saveNotes();
+        };
+
+        container.appendChild(arrow);
+        container.appendChild(noteEl);
+        makeDraggable(noteEl, arrow, note);
+      });
+    }
+
+    window.removeNote = (id, spread) => {
+      notes[spread] = notes[spread].filter(n => n.id !== id);
+      saveNotes();
+      renderPagePair();
+    };
 
     async function renderPagePair() {
       if (!pdfDoc) return;
@@ -222,6 +235,7 @@
 
       await renderPage(currentPage, leftCanvas, leftCtx);
       await renderPage(currentPage + 1, rightCanvas, rightCtx);
+      renderNotesForSpread(currentPage);
     }
 
     const calculateScale = (page) => {
