@@ -108,6 +108,7 @@
     let currentPage = 1;
     let notes = JSON.parse(localStorage.getItem('notes') || '{}');
     let bookmarks = JSON.parse(localStorage.getItem('bookmarks') || '[]');
+    let settingArrow = null;
 
     function saveNotes() {
       localStorage.setItem('notes', JSON.stringify(notes));
@@ -197,7 +198,7 @@
         noteEl.innerHTML = `
           <textarea>${note.text}</textarea>
           <br>
-          <button class="arrow-btn" onclick="setArrowTarget(${note.id})">🔽 Set Arrow Target</button>
+          <button class="arrow-btn" onclick="startSettingArrow(${note.id})">🔽 Set Arrow Target</button>
           <button onclick="this.parentElement.remove(); removeNote('${note.id}', ${spread})">🗑️</button>
         `;
         const arrow = document.createElement('div');
@@ -225,14 +226,20 @@
       renderPagePair();
     };
 
-    window.setArrowTarget = (noteId) => {
-      const noteData = notes[currentPage].find(note => note.id === noteId);
-      const targetPoint = prompt('Enter X,Y coordinates (e.g., "400,300")');
-      if (targetPoint) {
-        const [x, y] = targetPoint.split(',').map(coord => parseInt(coord));
+    window.startSettingArrow = (noteId) => {
+      settingArrow = noteId;
+      alert('Click anywhere on the screen to set the arrow target.');
+    };
+
+    container.onclick = (e) => {
+      if (settingArrow !== null) {
+        const x = e.clientX;
+        const y = e.clientY;
+        const noteData = notes[currentPage].find(note => note.id === settingArrow);
         noteData.arrowX = x;
         noteData.arrowY = y;
         saveNotes();
+        settingArrow = null;
         renderPagePair();
       }
     };
