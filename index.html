@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Script Viewer</title>
+  <title>Enhanced Script Viewer</title>
   <style>
     html, body {
       margin: 0;
@@ -16,11 +16,16 @@
       font-family: sans-serif;
     }
 
+    body.night-mode {
+      background: #eee;
+      color: #111;
+    }
+
     #toolbar {
       position: absolute;
       top: 10px;
       left: 10px;
-      z-index: 10;
+      z-index: 20;
       background: rgba(0, 0, 0, 0.6);
       padding: 8px 12px;
       border-radius: 8px;
@@ -35,6 +40,7 @@
       align-items: center;
       height: 100%;
       gap: 2vw;
+      perspective: 2000px;
       transition: transform 0.4s ease;
     }
 
@@ -43,7 +49,7 @@
       max-width: 45vw;
       background: white;
       box-shadow: 0 0 20px rgba(0,0,0,0.7);
-      transition: transform 0.3s ease;
+      transition: transform 0.5s ease;
       cursor: pointer;
     }
 
@@ -59,41 +65,124 @@
     button:hover {
       background: #666;
     }
+
+    #notesBox {
+      position: absolute;
+      top: 50px;
+      right: 20px;
+      width: 200px;
+      height: 150px;
+      background: #222;
+      color: white;
+      border: 1px solid #666;
+      padding: 10px;
+      display: none;
+      z-index: 15;
+    }
+
+    #notesBox textarea {
+      width: 100%;
+      height: 100px;
+    }
+
+    .note-button {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: yellow;
+      color: black;
+      padding: 4px 6px;
+      border-radius: 4px;
+      cursor: pointer;
+      z-index: 15;
+    }
+
+    #sceneSelector {
+      max-width: 150px;
+    }
   </style>
 </head>
 <body>
   <div id="toolbar">
     <input type="file" id="fileInput" accept="application/pdf"/>
-    <button id="fullscreenBtn">Enter Fullscreen</button>
+    <button id="fullscreenBtn">Fullscreen</button>
+    <button id="nightModeBtn">Night Mode</button>
+    <button id="bookmarkBtn">🔖 Bookmark</button>
+    <select id="sceneSelector">
+      <option value="">Go to Scene</option>
+      <option value="1">Act 1, Scene 1</option>
+      <option value="5">Act 1, Scene 2</option>
+      <option value="11">Act 2, Scene 1</option>
+    </select>
   </div>
+
   <div id="pdf-container">
     <canvas id="leftPage"></canvas>
     <canvas id="rightPage"></canvas>
+    <div class="note-button" onclick="toggleNotes()">📝</div>
+    <div id="notesBox">
+      <strong>Notes:</strong><br>
+      <textarea id="noteText"></textarea><br>
+      <button onclick="saveNotes()">Save</button>
+    </div>
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script>
     const fileInput = document.getElementById('fileInput');
     const fullscreenBtn = document.getElementById('fullscreenBtn');
+    const nightModeBtn = document.getElementById('nightModeBtn');
+    const bookmarkBtn = document.getElementById('bookmarkBtn');
+    const sceneSelector = document.getElementById('sceneSelector');
+
     const container = document.getElementById('pdf-container');
     const leftCanvas = document.getElementById('leftPage');
     const rightCanvas = document.getElementById('rightPage');
     const leftCtx = leftCanvas.getContext('2d');
     const rightCtx = rightCanvas.getContext('2d');
+    const notesBox = document.getElementById('notesBox');
+    const noteText = document.getElementById('noteText');
 
     let pdfDoc = null;
     let currentPage = 1;
+    let notes = {};
+    let bookmarks = [];
 
-    const enterFullscreen = () => {
+    fullscreenBtn.onclick = () => {
       const el = document.documentElement;
       if (el.requestFullscreen) el.requestFullscreen();
-      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-      else if (el.msRequestFullscreen) el.msRequestFullscreen();
     };
 
-    fullscreenBtn.addEventListener('click', enterFullscreen);
+    nightModeBtn.onclick = () => {
+      document.body.classList.toggle('night-mode');
+    };
 
-    const renderPagePair = async () => {
+    bookmarkBtn.onclick = () => {
+      if (!bookmarks.includes(currentPage)) {
+        bookmarks.push(currentPage);
+        alert('Bookmarked page ' + currentPage);
+      }
+    };
+
+    sceneSelector.onchange = () => {
+      const page = parseInt(sceneSelector.value);
+      if (page) {
+        currentPage = page;
+        renderPagePair();
+      }
+    };
+
+    function toggleNotes() {
+      notesBox.style.display = notesBox.style.display === 'none' ? 'block' : 'none';
+      noteText.value = notes[currentPage] || '';
+    }
+
+    function saveNotes() {
+      notes[currentPage] = noteText.value;
+      notesBox.style.display = 'none';
+    }
+
+    async function renderPagePair() {
       if (!pdfDoc) return;
 
       const renderPage = async (pageNum, canvas, ctx) => {
@@ -101,63 +190,53 @@
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           return;
         }
-
         const page = await pdfDoc.getPage(pageNum);
         const scale = calculateScale(page);
         const viewport = page.getViewport({ scale });
-
         canvas.width = viewport.width;
         canvas.height = viewport.height;
         await page.render({ canvasContext: ctx, viewport }).promise;
       };
 
+      container.style.transform = 'rotateY(15deg)';
+      setTimeout(() => {
+        container.style.transform = 'rotateY(0deg)';
+      }, 250);
+
       await renderPage(currentPage, leftCanvas, leftCtx);
       await renderPage(currentPage + 1, rightCanvas, rightCtx);
-    };
+    }
 
     const calculateScale = (page) => {
       const view = page.getViewport({ scale: 1 });
       const maxW = window.innerWidth * 0.45;
       const maxH = window.innerHeight * 0.9;
-      const scaleW = maxW / view.width;
-      const scaleH = maxH / view.height;
-      return Math.min(scaleW, scaleH);
+      return Math.min(maxW / view.width, maxH / view.height);
     };
 
-    const nextSpread = async () => {
+    function nextSpread() {
       if (!pdfDoc) return;
       currentPage += 2;
       if (currentPage > pdfDoc.numPages) currentPage = 1;
-      animateFlip();
-      await renderPagePair();
-    };
+      renderPagePair();
+    }
 
-    const prevSpread = async () => {
+    function prevSpread() {
       if (!pdfDoc) return;
       currentPage -= 2;
       if (currentPage < 1) currentPage = 1;
-      animateFlip();
-      await renderPagePair();
-    };
-
-    const animateFlip = () => {
-      container.style.transform = 'rotateY(10deg)';
-      setTimeout(() => {
-        container.style.transform = 'rotateY(0deg)';
-      }, 250);
-    };
+      renderPagePair();
+    }
 
     fileInput.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-
       const reader = new FileReader();
       reader.onload = async function () {
         const typedarray = new Uint8Array(this.result);
         pdfDoc = await pdfjsLib.getDocument(typedarray).promise;
         currentPage = 1;
-        enterFullscreen();
-        await renderPagePair();
+        renderPagePair();
       };
       reader.readAsArrayBuffer(file);
     });
@@ -165,9 +244,7 @@
     leftCanvas.addEventListener('click', prevSpread);
     rightCanvas.addEventListener('click', nextSpread);
 
-    window.addEventListener('resize', () => {
-      if (pdfDoc) renderPagePair();
-    });
+    window.addEventListener('resize', renderPagePair);
   </script>
 </body>
 </html>
