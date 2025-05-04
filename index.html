@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Script Viewer</title>
+  <style>
+    body {
+      margin: 0;
+      background: #111;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+      font-family: sans-serif;
+    }
+    #toolbar {
+      padding: 10px;
+      background: #222;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 10;
+    }
+    #pdf-container {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 20px;
+      padding: 20px;
+      transition: transform 0.6s ease;
+    }
+    canvas {
+      box-shadow: 0 0 10px rgba(0,0,0,0.8);
+      background: white;
+    }
+    #overlay {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 5;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <input type="file" id="fileInput" accept="application/pdf"/>
+  </div>
+  <div id="pdf-container">
+    <canvas id="leftPage"></canvas>
+    <canvas id="rightPage"></canvas>
+  </div>
+  <div id="overlay" title="Click or tap to flip pages"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const container = document.getElementById('pdf-container');
+    const overlay = document.getElementById('overlay');
+    const leftCanvas = document.getElementById('leftPage');
+    const rightCanvas = document.getElementById('rightPage');
+    const leftCtx = leftCanvas.getContext('2d');
+    const rightCtx = rightCanvas.getContext('2d');
+
+    let pdfDoc = null;
+    let currentPage = 1;
+
+    const renderPagePair = async () => {
+      if (!pdfDoc) return;
+      const renderPage = async (pageNum, canvas, ctx) => {
+        if (pageNum > pdfDoc.numPages) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          return;
+        }
+        const page = await pdfDoc.getPage(pageNum);
+        const viewport = page.getViewport({ scale: 1.5 });
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        await page.render({ canvasContext: ctx, viewport }).promise;
+      };
+
+      await renderPage(currentPage, leftCanvas, leftCtx);
+      await renderPage(currentPage + 1, rightCanvas, rightCtx);
+    };
+
+    overlay.addEventListener('click', async () => {
+      if (!pdfDoc) return;
+      // Add flip animation
+      container.style.transform = 'rotateY(10deg)';
+      setTimeout(() => {
+        container.style.transform = 'rotateY(0deg)';
+      }, 300);
+
+      currentPage += 2;
+      if (currentPage > pdfDoc.numPages) currentPage = 1;
+      await renderPagePair();
+    });
+
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async function() {
+        const typedarray = new Uint8Array(this.result);
+        pdfDoc = await pdfjsLib.getDocument(typedarray).promise;
+        currentPage = 1;
+        await renderPagePair();
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  </script>
+</body>
+</html>
