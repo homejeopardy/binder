@@ -5,39 +5,46 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Script Viewer</title>
   <style>
-    body {
+    html, body {
       margin: 0;
+      padding: 0;
       background: #111;
       color: #fff;
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
+      height: 100%;
+      width: 100%;
       overflow: hidden;
       font-family: sans-serif;
     }
+
     #toolbar {
-      padding: 10px;
-      background: #222;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 10;
-    }
-    #pdf-container {
-      flex: 1;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      gap: 20px;
-      padding: 20px;
-      transition: transform 0.6s ease;
-    }
-    canvas {
-      box-shadow: 0 0 10px rgba(0,0,0,0.8);
-      background: white;
-    }
-    #overlay {
       position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 10;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 8px 12px;
+      border-radius: 8px;
+    }
+
+    #pdf-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100%;
+      gap: 2vw;
+      transition: transform 0.4s ease;
+    }
+
+    canvas {
+      max-height: 90vh;
+      max-width: 45vw;
+      background: white;
+      box-shadow: 0 0 20px rgba(0,0,0,0.7);
+      transition: transform 0.3s ease;
+    }
+
+    #overlay {
+      position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
       z-index: 5;
       cursor: pointer;
@@ -67,15 +74,26 @@
     let pdfDoc = null;
     let currentPage = 1;
 
+    const enterFullscreen = () => {
+      const el = document.documentElement;
+      if (el.requestFullscreen) el.requestFullscreen();
+      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+      else if (el.msRequestFullscreen) el.msRequestFullscreen();
+    };
+
     const renderPagePair = async () => {
       if (!pdfDoc) return;
+
       const renderPage = async (pageNum, canvas, ctx) => {
         if (pageNum > pdfDoc.numPages) {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           return;
         }
+
         const page = await pdfDoc.getPage(pageNum);
-        const viewport = page.getViewport({ scale: 1.5 });
+        const scale = calculateScale(page);
+        const viewport = page.getViewport({ scale });
+
         canvas.width = viewport.width;
         canvas.height = viewport.height;
         await page.render({ canvasContext: ctx, viewport }).promise;
@@ -85,13 +103,22 @@
       await renderPage(currentPage + 1, rightCanvas, rightCtx);
     };
 
+    const calculateScale = (page) => {
+      const view = page.getViewport({ scale: 1 });
+      const maxW = window.innerWidth * 0.45;
+      const maxH = window.innerHeight * 0.9;
+      const scaleW = maxW / view.width;
+      const scaleH = maxH / view.height;
+      return Math.min(scaleW, scaleH);
+    };
+
     overlay.addEventListener('click', async () => {
       if (!pdfDoc) return;
-      // Add flip animation
+
       container.style.transform = 'rotateY(10deg)';
       setTimeout(() => {
         container.style.transform = 'rotateY(0deg)';
-      }, 300);
+      }, 250);
 
       currentPage += 2;
       if (currentPage > pdfDoc.numPages) currentPage = 1;
@@ -103,13 +130,18 @@
       if (!file) return;
 
       const reader = new FileReader();
-      reader.onload = async function() {
+      reader.onload = async function () {
         const typedarray = new Uint8Array(this.result);
         pdfDoc = await pdfjsLib.getDocument(typedarray).promise;
         currentPage = 1;
+        enterFullscreen();
         await renderPagePair();
       };
       reader.readAsArrayBuffer(file);
+    });
+
+    window.addEventListener('resize', () => {
+      if (pdfDoc) renderPagePair();
     });
   </script>
 </body>
