@@ -11,79 +11,53 @@
       height: 100%; width: 100%;
       overflow: hidden; font-family: sans-serif;
     }
-    body.night-mode {
-      background: #eee; color: #111;
-    }
     #toolbar {
       position: absolute; top: 10px; left: 10px; z-index: 100;
       background: rgba(0, 0, 0, 0.6);
       padding: 8px 12px; border-radius: 8px;
-      display: flex; gap: 10px; align-items: center;
+      display: flex; gap: 10px;
     }
     #pdf-container {
       display: flex; justify-content: center; align-items: center;
       height: 100%; gap: 2vw; perspective: 2000px;
-      transition: transform 0.4s ease; position: relative;
+      position: relative;
     }
     canvas {
       max-height: 90vh; max-width: 45vw;
       background: white;
       box-shadow: 0 0 20px rgba(0,0,0,0.7);
-      transition: transform 0.5s ease;
       cursor: pointer;
-    }
-    button, select {
-      background: #444; border: none;
-      color: white; padding: 6px 10px;
-      border-radius: 6px; cursor: pointer;
-    }
-    button:hover, select:hover {
-      background: #666;
     }
     .note {
       position: absolute;
-      min-width: 150px; min-height: 80px;
+      min-width: 120px; min-height: 80px;
       background: yellow; color: black;
-      border: 1px solid #444;
-      padding: 8px; border-radius: 8px;
-      resize: both; overflow: auto; z-index: 90;
-      cursor: move;
-    }
-    .arrow {
-      position: absolute;
-      width: 100px; height: 2px;
-      background: red;
-      transform-origin: left center;
-      z-index: 89;
+      border: 1px solid #333;
+      padding: 6px; border-radius: 8px;
+      resize: both; overflow: auto;
+      cursor: move; z-index: 10;
     }
     .note textarea {
       width: 100%; height: 50px; resize: none;
     }
-    .note .arrow-btn {
-      background: transparent;
-      color: #444;
-      border: none;
-      cursor: pointer;
-      font-size: 16px;
-      margin-top: 5px;
+    .arrow {
+      position: absolute;
+      height: 2px; background: red;
+      transform-origin: left center;
+      z-index: 5;
+    }
+    button {
+      background: #444; border: none;
+      color: white; padding: 5px 10px;
+      border-radius: 6px; cursor: pointer;
     }
   </style>
 </head>
 <body>
   <div id="toolbar">
     <input type="file" id="fileInput" accept="application/pdf"/>
-    <button id="fullscreenBtn">Fullscreen</button>
-    <button id="nightModeBtn">Night Mode</button>
-    <button id="bookmarkBtn">🔖 Bookmark</button>
     <button id="addNoteBtn">➕ Add Note</button>
-    <select id="sceneSelector">
-      <option value="">Go to Scene</option>
-      <option value="1">Act 1, Scene 1</option>
-      <option value="5">Act 1, Scene 2</option>
-      <option value="11">Act 2, Scene 1</option>
-    </select>
   </div>
-
   <div id="pdf-container">
     <canvas id="leftPage"></canvas>
     <canvas id="rightPage"></canvas>
@@ -93,223 +67,145 @@
   <script>
     const container = document.getElementById('pdf-container');
     const fileInput = document.getElementById('fileInput');
-    const fullscreenBtn = document.getElementById('fullscreenBtn');
-    const nightModeBtn = document.getElementById('nightModeBtn');
-    const bookmarkBtn = document.getElementById('bookmarkBtn');
-    const addNoteBtn = document.getElementById('addNoteBtn');
-    const sceneSelector = document.getElementById('sceneSelector');
-
     const leftCanvas = document.getElementById('leftPage');
     const rightCanvas = document.getElementById('rightPage');
-    const leftCtx = leftCanvas.getContext('2d');
-    const rightCtx = rightCanvas.getContext('2d');
+    const addNoteBtn = document.getElementById('addNoteBtn');
 
-    let pdfDoc = null;
     let currentPage = 1;
-    let notes = JSON.parse(localStorage.getItem('notes') || '{}');
-    let bookmarks = JSON.parse(localStorage.getItem('bookmarks') || '[]');
+    let pdfDoc = null;
     let settingArrow = null;
-    let arrowStart = null;
+    let notes = JSON.parse(localStorage.getItem("notes") || "{}");
 
     function saveNotes() {
-      localStorage.setItem('notes', JSON.stringify(notes));
+      localStorage.setItem("notes", JSON.stringify(notes));
     }
 
-    function saveBookmarks() {
-      localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
-    }
-
-    fullscreenBtn.onclick = () => {
-      const el = document.documentElement;
-      if (el.requestFullscreen) el.requestFullscreen();
-    };
-
-    nightModeBtn.onclick = () => {
-      document.body.classList.toggle('night-mode');
-    };
-
-    bookmarkBtn.onclick = () => {
-      if (!bookmarks.includes(currentPage)) {
-        bookmarks.push(currentPage);
-        saveBookmarks();
-        alert('Bookmarked page ' + currentPage);
-      }
-    };
-
-    sceneSelector.onchange = () => {
-      const page = parseInt(sceneSelector.value);
-      if (page) {
-        currentPage = page;
-        renderPagePair();
-      }
-    };
-
-    addNoteBtn.onclick = () => {
-      const id = 'note-' + Date.now();
-      const spread = currentPage;
-      const noteData = {
-        id, spread,
-        x: 200, y: 200, text: 'Note',
-        arrowX: 400, arrowY: 300
-      };
-      if (!notes[spread]) notes[spread] = [];
-      notes[spread].push(noteData);
-      saveNotes();
-      renderPagePair();
-    };
-
-    function makeDraggable(noteEl, arrowEl, noteData) {
-      noteEl.onmousedown = function (e) {
-        const offsetX = e.clientX - noteEl.offsetLeft;
-        const offsetY = e.clientY - noteEl.offsetTop;
-        document.onmousemove = function (e) {
-          noteEl.style.left = (e.clientX - offsetX) + 'px';
-          noteEl.style.top = (e.clientY - offsetY) + 'px';
-          noteData.x = parseInt(noteEl.style.left);
-          noteData.y = parseInt(noteEl.style.top);
-          updateArrow(arrowEl, noteData);
-          saveNotes();
-        };
-        document.onmouseup = () => {
-          document.onmousemove = null;
-        };
-      };
-    }
-
-    function updateArrow(arrow, noteData) {
-      const dx = noteData.arrowX - noteData.x;
-      const dy = noteData.arrowY - noteData.y;
-      const length = Math.sqrt(dx*dx + dy*dy);
+    function updateArrow(note, arrow) {
+      const dx = note.targetX - note.x;
+      const dy = note.targetY - note.y;
+      const len = Math.sqrt(dx * dx + dy * dy);
       const angle = Math.atan2(dy, dx) * 180 / Math.PI;
-      arrow.style.width = length + 'px';
-      arrow.style.left = noteData.x + 'px';
-      arrow.style.top = noteData.y + 'px';
+      arrow.style.left = note.x + "px";
+      arrow.style.top = note.y + "px";
+      arrow.style.width = len + "px";
       arrow.style.transform = `rotate(${angle}deg)`;
     }
 
-    function renderNotesForSpread(spread) {
-      document.querySelectorAll('.note, .arrow').forEach(el => el.remove());
+    function renderNotesForPage(spread) {
+      document.querySelectorAll(".note, .arrow").forEach(e => e.remove());
       if (!notes[spread]) return;
 
       notes[spread].forEach(note => {
-        const noteEl = document.createElement('div');
-        noteEl.className = 'note';
-        noteEl.style.left = note.x + 'px';
-        noteEl.style.top = note.y + 'px';
+        const noteEl = document.createElement("div");
+        noteEl.className = "note";
+        noteEl.style.left = note.x + "px";
+        noteEl.style.top = note.y + "px";
         noteEl.innerHTML = `
           <textarea>${note.text}</textarea>
           <br>
-          <button class="arrow-btn" onclick="startSettingArrow(${note.id})">🔽 Set Arrow Target</button>
-          <button onclick="this.parentElement.remove(); removeNote('${note.id}', ${spread})">🗑️</button>
+          <button class="arrow-btn">🔽 Set Arrow Target</button>
         `;
-        const arrow = document.createElement('div');
-        arrow.className = 'arrow';
-        updateArrow(arrow, note);
+        const arrow = document.createElement("div");
+        arrow.className = "arrow";
+        updateArrow(note, arrow);
 
-        noteEl.querySelector('textarea').oninput = (e) => {
+        // Update text
+        noteEl.querySelector("textarea").oninput = e => {
           note.text = e.target.value;
           saveNotes();
         };
 
-        noteEl.onclick = (e) => {
-          e.stopPropagation();
+        // Set arrow mode
+        noteEl.querySelector(".arrow-btn").onclick = () => {
+          settingArrow = note;
+        };
+
+        // Dragging
+        noteEl.onmousedown = e => {
+          if (e.target.tagName === "TEXTAREA" || e.target.tagName === "BUTTON") return;
+          const offsetX = e.clientX - noteEl.offsetLeft;
+          const offsetY = e.clientY - noteEl.offsetTop;
+          document.onmousemove = e => {
+            note.x = e.clientX - offsetX;
+            note.y = e.clientY - offsetY;
+            noteEl.style.left = note.x + "px";
+            noteEl.style.top = note.y + "px";
+            updateArrow(note, arrow);
+            saveNotes();
+          };
+          document.onmouseup = () => {
+            document.onmousemove = null;
+          };
         };
 
         container.appendChild(arrow);
         container.appendChild(noteEl);
-        makeDraggable(noteEl, arrow, note);
       });
     }
 
-    window.removeNote = (id, spread) => {
-      notes[spread] = notes[spread].filter(n => n.id !== id);
-      saveNotes();
-      renderPagePair();
-    };
-
-    window.startSettingArrow = (noteId) => {
-      settingArrow = noteId;
-      alert('Click anywhere on the screen to set the arrow target.');
-    };
-
-    container.onclick = (e) => {
-      if (settingArrow !== null) {
-        const x = e.clientX;
-        const y = e.clientY;
-        const noteData = notes[currentPage].find(note => note.id === settingArrow);
-        if (noteData) {
-          noteData.arrowX = x;
-          noteData.arrowY = y;
-          saveNotes();
-          settingArrow = null;
-          renderPagePair();
-        }
+    container.onclick = e => {
+      if (settingArrow) {
+        settingArrow.targetX = e.clientX;
+        settingArrow.targetY = e.clientY;
+        saveNotes();
+        settingArrow = null;
+        renderNotesForPage(currentPage);
       }
+    };
+
+    addNoteBtn.onclick = () => {
+      const spread = currentPage;
+      if (!notes[spread]) notes[spread] = [];
+      const note = {
+        id: Date.now(),
+        x: 150, y: 150,
+        text: "New note",
+        targetX: 250,
+        targetY: 150
+      };
+      notes[spread].push(note);
+      saveNotes();
+      renderNotesForPage(spread);
     };
 
     async function renderPagePair() {
       if (!pdfDoc) return;
-
-      const renderPage = async (pageNum, canvas, ctx) => {
-        if (pageNum > pdfDoc.numPages || pageNum < 1) {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          return;
-        }
+      const renderPage = async (pageNum, canvas) => {
         const page = await pdfDoc.getPage(pageNum);
-        const scale = calculateScale(page);
+        const ctx = canvas.getContext("2d");
+        const scale = 1.5;
         const viewport = page.getViewport({ scale });
         canvas.width = viewport.width;
         canvas.height = viewport.height;
         await page.render({ canvasContext: ctx, viewport }).promise;
       };
-
-      container.style.transform = 'rotateY(15deg)';
-      setTimeout(() => {
-        container.style.transform = 'rotateY(0deg)';
-      }, 250);
-
-      await renderPage(currentPage, leftCanvas, leftCtx);
-      await renderPage(currentPage + 1, rightCanvas, rightCtx);
-      renderNotesForSpread(currentPage);
+      await renderPage(currentPage, leftCanvas);
+      await renderPage(currentPage + 1, rightCanvas);
+      renderNotesForPage(currentPage);
     }
 
-    const calculateScale = (page) => {
-      const view = page.getViewport({ scale: 1 });
-      const maxW = window.innerWidth * 0.45;
-      const maxH = window.innerHeight * 0.9;
-      return Math.min(maxW / view.width, maxH / view.height);
+    leftCanvas.onclick = () => {
+      currentPage = Math.max(1, currentPage - 2);
+      renderPagePair();
     };
-
-    function nextSpread() {
-      if (!pdfDoc) return;
+    rightCanvas.onclick = () => {
       currentPage += 2;
       if (currentPage > pdfDoc.numPages) currentPage = 1;
       renderPagePair();
-    }
+    };
 
-    function prevSpread() {
-      if (!pdfDoc) return;
-      currentPage -= 2;
-      if (currentPage < 1) currentPage = 1;
-      renderPagePair();
-    }
-
-    fileInput.addEventListener('change', async (e) => {
+    fileInput.onchange = async e => {
       const file = e.target.files[0];
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = async function () {
-        const typedarray = new Uint8Array(this.result);
-        pdfDoc = await pdfjsLib.getDocument(typedarray).promise;
+      reader.onload = async () => {
+        const pdfData = new Uint8Array(reader.result);
+        pdfDoc = await pdfjsLib.getDocument({ data: pdfData }).promise;
         currentPage = 1;
         renderPagePair();
       };
       reader.readAsArrayBuffer(file);
-    });
-
-    leftCanvas.addEventListener('click', prevSpread);
-    rightCanvas.addEventListener('click', nextSpread);
-    window.addEventListener('resize', renderPagePair);
+    };
   </script>
 </body>
 </html>
