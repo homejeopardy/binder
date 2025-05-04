@@ -24,6 +24,9 @@
       background: rgba(0, 0, 0, 0.6);
       padding: 8px 12px;
       border-radius: 8px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
     }
 
     #pdf-container {
@@ -41,31 +44,38 @@
       background: white;
       box-shadow: 0 0 20px rgba(0,0,0,0.7);
       transition: transform 0.3s ease;
+      cursor: pointer;
     }
 
-    #overlay {
-      position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      z-index: 5;
+    button {
+      background: #444;
+      border: none;
+      color: white;
+      padding: 6px 10px;
+      border-radius: 6px;
       cursor: pointer;
+    }
+
+    button:hover {
+      background: #666;
     }
   </style>
 </head>
 <body>
   <div id="toolbar">
     <input type="file" id="fileInput" accept="application/pdf"/>
+    <button id="fullscreenBtn">Enter Fullscreen</button>
   </div>
   <div id="pdf-container">
     <canvas id="leftPage"></canvas>
     <canvas id="rightPage"></canvas>
   </div>
-  <div id="overlay" title="Click or tap to flip pages"></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script>
     const fileInput = document.getElementById('fileInput');
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
     const container = document.getElementById('pdf-container');
-    const overlay = document.getElementById('overlay');
     const leftCanvas = document.getElementById('leftPage');
     const rightCanvas = document.getElementById('rightPage');
     const leftCtx = leftCanvas.getContext('2d');
@@ -81,11 +91,13 @@
       else if (el.msRequestFullscreen) el.msRequestFullscreen();
     };
 
+    fullscreenBtn.addEventListener('click', enterFullscreen);
+
     const renderPagePair = async () => {
       if (!pdfDoc) return;
 
       const renderPage = async (pageNum, canvas, ctx) => {
-        if (pageNum > pdfDoc.numPages) {
+        if (pageNum > pdfDoc.numPages || pageNum < 1) {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           return;
         }
@@ -112,18 +124,28 @@
       return Math.min(scaleW, scaleH);
     };
 
-    overlay.addEventListener('click', async () => {
+    const nextSpread = async () => {
       if (!pdfDoc) return;
+      currentPage += 2;
+      if (currentPage > pdfDoc.numPages) currentPage = 1;
+      animateFlip();
+      await renderPagePair();
+    };
 
+    const prevSpread = async () => {
+      if (!pdfDoc) return;
+      currentPage -= 2;
+      if (currentPage < 1) currentPage = 1;
+      animateFlip();
+      await renderPagePair();
+    };
+
+    const animateFlip = () => {
       container.style.transform = 'rotateY(10deg)';
       setTimeout(() => {
         container.style.transform = 'rotateY(0deg)';
       }, 250);
-
-      currentPage += 2;
-      if (currentPage > pdfDoc.numPages) currentPage = 1;
-      await renderPagePair();
-    });
+    };
 
     fileInput.addEventListener('change', async (e) => {
       const file = e.target.files[0];
@@ -139,6 +161,9 @@
       };
       reader.readAsArrayBuffer(file);
     });
+
+    leftCanvas.addEventListener('click', prevSpread);
+    rightCanvas.addEventListener('click', nextSpread);
 
     window.addEventListener('resize', () => {
       if (pdfDoc) renderPagePair();
