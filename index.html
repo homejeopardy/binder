@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Enhanced Script Viewer</title>
+  <title>Script Viewer</title>
   <style>
     html, body {
       margin: 0;
@@ -25,7 +25,7 @@
       position: absolute;
       top: 10px;
       left: 10px;
-      z-index: 20;
+      z-index: 100;
       background: rgba(0, 0, 0, 0.6);
       padding: 8px 12px;
       border-radius: 8px;
@@ -42,6 +42,7 @@
       gap: 2vw;
       perspective: 2000px;
       transition: transform 0.4s ease;
+      position: relative;
     }
 
     canvas {
@@ -53,7 +54,7 @@
       cursor: pointer;
     }
 
-    button {
+    button, select {
       background: #444;
       border: none;
       color: white;
@@ -62,43 +63,38 @@
       cursor: pointer;
     }
 
-    button:hover {
+    button:hover, select:hover {
       background: #666;
     }
 
-    #notesBox {
+    .note {
       position: absolute;
-      top: 50px;
-      right: 20px;
-      width: 200px;
-      height: 150px;
-      background: #222;
-      color: white;
-      border: 1px solid #666;
-      padding: 10px;
-      display: none;
-      z-index: 15;
-    }
-
-    #notesBox textarea {
-      width: 100%;
-      height: 100px;
-    }
-
-    .note-button {
-      position: absolute;
-      top: 10px;
-      right: 10px;
+      min-width: 150px;
+      min-height: 80px;
       background: yellow;
       color: black;
-      padding: 4px 6px;
-      border-radius: 4px;
-      cursor: pointer;
-      z-index: 15;
+      border: 1px solid #444;
+      padding: 8px;
+      border-radius: 8px;
+      resize: both;
+      overflow: auto;
+      z-index: 90;
+      cursor: move;
     }
 
-    #sceneSelector {
-      max-width: 150px;
+    .arrow {
+      position: absolute;
+      width: 100px;
+      height: 2px;
+      background: red;
+      transform-origin: left center;
+      z-index: 89;
+    }
+
+    .note textarea {
+      width: 100%;
+      height: 50px;
+      resize: none;
     }
   </style>
 </head>
@@ -108,6 +104,7 @@
     <button id="fullscreenBtn">Fullscreen</button>
     <button id="nightModeBtn">Night Mode</button>
     <button id="bookmarkBtn">🔖 Bookmark</button>
+    <button id="addNoteBtn">➕ Add Note</button>
     <select id="sceneSelector">
       <option value="">Go to Scene</option>
       <option value="1">Act 1, Scene 1</option>
@@ -119,12 +116,6 @@
   <div id="pdf-container">
     <canvas id="leftPage"></canvas>
     <canvas id="rightPage"></canvas>
-    <div class="note-button" onclick="toggleNotes()">📝</div>
-    <div id="notesBox">
-      <strong>Notes:</strong><br>
-      <textarea id="noteText"></textarea><br>
-      <button onclick="saveNotes()">Save</button>
-    </div>
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -134,14 +125,13 @@
     const nightModeBtn = document.getElementById('nightModeBtn');
     const bookmarkBtn = document.getElementById('bookmarkBtn');
     const sceneSelector = document.getElementById('sceneSelector');
-
+    const addNoteBtn = document.getElementById('addNoteBtn');
     const container = document.getElementById('pdf-container');
+
     const leftCanvas = document.getElementById('leftPage');
     const rightCanvas = document.getElementById('rightPage');
     const leftCtx = leftCanvas.getContext('2d');
     const rightCtx = rightCanvas.getContext('2d');
-    const notesBox = document.getElementById('notesBox');
-    const noteText = document.getElementById('noteText');
 
     let pdfDoc = null;
     let currentPage = 1;
@@ -172,14 +162,41 @@
       }
     };
 
-    function toggleNotes() {
-      notesBox.style.display = notesBox.style.display === 'none' ? 'block' : 'none';
-      noteText.value = notes[currentPage] || '';
+    addNoteBtn.onclick = () => {
+      const note = document.createElement('div');
+      note.className = 'note';
+      note.style.left = '200px';
+      note.style.top = '200px';
+      note.innerHTML = `<textarea>Note</textarea><br><button onclick="addArrow(this)">➡️</button>`;
+      makeDraggable(note);
+      container.appendChild(note);
+    };
+
+    function addArrow(btn) {
+      const note = btn.closest('.note');
+      const rect = note.getBoundingClientRect();
+      const arrow = document.createElement('div');
+      arrow.className = 'arrow';
+      arrow.style.left = (rect.left + rect.width / 2 - 50) + 'px';
+      arrow.style.top = (rect.top + rect.height / 2) + 'px';
+      arrow.style.transform = `rotate(45deg)`;
+      container.appendChild(arrow);
     }
 
-    function saveNotes() {
-      notes[currentPage] = noteText.value;
-      notesBox.style.display = 'none';
+    function makeDraggable(el) {
+      let offsetX, offsetY;
+      el.onmousedown = function (e) {
+        offsetX = e.clientX - el.offsetLeft;
+        offsetY = e.clientY - el.offsetTop;
+        document.onmousemove = function (e) {
+          el.style.left = (e.clientX - offsetX) + 'px';
+          el.style.top = (e.clientY - offsetY) + 'px';
+        };
+        document.onmouseup = function () {
+          document.onmousemove = null;
+          document.onmouseup = null;
+        };
+      };
     }
 
     async function renderPagePair() {
@@ -243,7 +260,6 @@
 
     leftCanvas.addEventListener('click', prevSpread);
     rightCanvas.addEventListener('click', nextSpread);
-
     window.addEventListener('resize', renderPagePair);
   </script>
 </body>
