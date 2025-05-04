@@ -108,7 +108,6 @@
     let currentPage = 1;
     let notes = JSON.parse(localStorage.getItem('notes') || '{}');
     let bookmarks = JSON.parse(localStorage.getItem('bookmarks') || '[]');
-    let arrowTarget = { x: 0, y: 0 }; // Default arrow target
 
     function saveNotes() {
       localStorage.setItem('notes', JSON.stringify(notes));
