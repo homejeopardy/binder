@@ -53,7 +53,7 @@
       position: absolute;
       width: 100px; height: 2px;
       background: red;
-      transform-origin: right center;
+      transform-origin: left center;
       z-index: 89;
     }
     .note textarea {
@@ -237,11 +237,13 @@
         const x = e.clientX;
         const y = e.clientY;
         const noteData = notes[currentPage].find(note => note.id === settingArrow);
-        noteData.arrowX = x;
-        noteData.arrowY = y;
-        saveNotes();
-        settingArrow = null;
-        renderPagePair();
+        if (noteData) {
+          noteData.arrowX = x;
+          noteData.arrowY = y;
+          saveNotes();
+          settingArrow = null;
+          renderPagePair();
+        }
       }
     };
 
