@@ -59,6 +59,14 @@
     .note textarea {
       width: 100%; height: 50px; resize: none;
     }
+    .note .arrow-btn {
+      background: transparent;
+      color: #444;
+      border: none;
+      cursor: pointer;
+      font-size: 16px;
+      margin-top: 5px;
+    }
   </style>
 </head>
 <body>
@@ -100,7 +108,7 @@
     let currentPage = 1;
     let notes = JSON.parse(localStorage.getItem('notes') || '{}');
     let bookmarks = JSON.parse(localStorage.getItem('bookmarks') || '[]');
-    let arrowTarget = null; // Stores the point the arrow should point to
+    let arrowTarget = { x: 0, y: 0 }; // Default arrow target
 
     function saveNotes() {
       localStorage.setItem('notes', JSON.stringify(notes));
@@ -190,6 +198,7 @@
         noteEl.innerHTML = `
           <textarea>${note.text}</textarea>
           <br>
+          <button class="arrow-btn" onclick="setArrowTarget(${note.id})">🔽 Set Arrow Target</button>
           <button onclick="this.parentElement.remove(); removeNote('${note.id}', ${spread})">🗑️</button>
         `;
         const arrow = document.createElement('div');
@@ -203,11 +212,6 @@
 
         noteEl.onclick = (e) => {
           e.stopPropagation();
-          arrowTarget = { x: e.clientX, y: e.clientY };
-          note.arrowX = arrowTarget.x;
-          note.arrowY = arrowTarget.y;
-          updateArrow(arrow, note);
-          saveNotes();
         };
 
         container.appendChild(arrow);
@@ -220,6 +224,18 @@
       notes[spread] = notes[spread].filter(n => n.id !== id);
       saveNotes();
       renderPagePair();
+    };
+
+    window.setArrowTarget = (noteId) => {
+      const noteData = notes[currentPage].find(note => note.id === noteId);
+      const targetPoint = prompt('Enter X,Y coordinates (e.g., "400,300")');
+      if (targetPoint) {
+        const [x, y] = targetPoint.split(',').map(coord => parseInt(coord));
+        noteData.arrowX = x;
+        noteData.arrowY = y;
+        saveNotes();
+        renderPagePair();
+      }
     };
 
     async function renderPagePair() {
