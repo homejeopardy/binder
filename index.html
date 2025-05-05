@@ -1,68 +1,83 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8">
   <title>Script Viewer</title>
   <style>
     html, body {
       margin: 0; padding: 0;
-      background: #111; color: #fff;
       height: 100%; width: 100%;
-      overflow: hidden; font-family: sans-serif;
+      overflow: hidden;
+      background: #111;
+      color: #fff;
+      font-family: sans-serif;
     }
-    body.night-mode {
-      background: #eee; color: #111;
+    body.night {
+      background: #eee;
+      color: #111;
     }
     #toolbar {
-      position: absolute; top: 10px; left: 10px; z-index: 100;
-      background: rgba(0, 0, 0, 0.6);
-      padding: 8px 12px; border-radius: 8px;
-      display: flex; gap: 10px;
+      position: absolute;
+      top: 10px; left: 10px; z-index: 10;
+      display: flex; gap: 8px;
+      background: rgba(0,0,0,0.6);
+      padding: 6px 12px;
+      border-radius: 6px;
     }
-    #pdf-container {
-      display: flex; justify-content: center; align-items: center;
-      height: 100%; gap: 2vw; position: relative;
+    button, select {
+      padding: 4px 10px;
+      border-radius: 4px;
+      border: none;
+      background: #444;
+      color: white;
+      cursor: pointer;
     }
     canvas {
-      max-height: 90vh; max-width: 45vw;
       background: white;
-      box-shadow: 0 0 20px rgba(0,0,0,0.7);
+      box-shadow: 0 0 20px rgba(0,0,0,0.4);
       cursor: pointer;
+    }
+    #pdf-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 2vw;
+      height: 100%;
+      position: relative;
     }
     .note {
       position: absolute;
-      min-width: 120px; min-height: 80px;
-      background: yellow; color: black;
-      border: 1px solid #333;
-      padding: 6px; border-radius: 8px;
-      resize: both; overflow: auto;
-      cursor: move; z-index: 10;
+      background: yellow;
+      color: black;
+      padding: 6px;
+      border-radius: 6px;
+      resize: both;
+      overflow: auto;
+      min-width: 100px;
+      min-height: 60px;
+      cursor: move;
+      z-index: 5;
     }
     .note textarea {
-      width: 100%; height: 50px; resize: none;
+      width: 100%; height: 40px; resize: none;
     }
     .arrow {
       position: absolute;
-      height: 2px; background: red;
+      height: 2px;
+      background: red;
       transform-origin: left center;
-      z-index: 5;
-    }
-    button {
-      background: #444; border: none;
-      color: white; padding: 5px 10px;
-      border-radius: 6px; cursor: pointer;
+      z-index: 4;
     }
   </style>
 </head>
 <body>
   <div id="toolbar">
-    <input type="file" id="fileInput" accept="application/pdf"/>
-    <button id="fullscreenBtn">⛶ Fullscreen</button>
-    <button id="nightModeBtn">🌙 Night Mode</button>
-    <button id="bookmarkBtn">🔖 Bookmark</button>
-    <button id="addNoteBtn">➕ Add Note</button>
-    <select id="sceneSelector">
+    <input type="file" id="fileInput" accept="application/pdf">
+    <button id="fsBtn">⛶ Fullscreen</button>
+    <button id="nightBtn">🌙 Night Mode</button>
+    <button id="addNote">➕ Add Note</button>
+    <button id="bookmark">🔖 Bookmark</button>
+    <select id="sceneJump">
       <option value="">Jump to Scene</option>
       <option value="1">Act 1, Scene 1</option>
       <option value="5">Act 1, Scene 2</option>
@@ -71,149 +86,180 @@
   </div>
 
   <div id="pdf-container">
-    <canvas id="leftPage"></canvas>
-    <canvas id="rightPage"></canvas>
+    <canvas id="leftCanvas"></canvas>
+    <canvas id="rightCanvas"></canvas>
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script>
-    const container = document.getElementById('pdf-container');
     const fileInput = document.getElementById('fileInput');
-    const fullscreenBtn = document.getElementById('fullscreenBtn');
-    const nightModeBtn = document.getElementById('nightModeBtn');
-    const bookmarkBtn = document.getElementById('bookmarkBtn');
-    const addNoteBtn = document.getElementById('addNoteBtn');
-    const sceneSelector = document.getElementById('sceneSelector');
-    const leftCanvas = document.getElementById('leftPage');
-    const rightCanvas = document.getElementById('rightPage');
+    const fsBtn = document.getElementById('fsBtn');
+    const nightBtn = document.getElementById('nightBtn');
+    const addNoteBtn = document.getElementById('addNote');
+    const bookmarkBtn = document.getElementById('bookmark');
+    const sceneJump = document.getElementById('sceneJump');
+    const leftCanvas = document.getElementById('leftCanvas');
+    const rightCanvas = document.getElementById('rightCanvas');
+    const container = document.getElementById('pdf-container');
 
-    let pdfDoc = null;
+    let pdf = null;
     let currentPage = 1;
-    let settingArrow = null;
+    let arrowTargeting = null;
     let notes = JSON.parse(localStorage.getItem("notes") || "{}");
-    let bookmarks = JSON.parse(localStorage.getItem("bookmarks") || "[]");
+
+    function getSpreadKey(page) {
+      return `${page}-${page + 1}`;
+    }
 
     function saveNotes() {
       localStorage.setItem("notes", JSON.stringify(notes));
     }
-    
-    function saveBookmarks() {
-      localStorage.setItem("bookmarks", JSON.stringify(bookmarks));
-    }
 
-    function updateArrow(note, arrow) {
+    function renderArrow(note, noteDiv) {
+      const arrow = document.createElement("div");
+      arrow.className = "arrow";
       const dx = note.targetX - note.x;
       const dy = note.targetY - note.y;
-      const len = Math.sqrt(dx * dx + dy * dy);
+      const length = Math.sqrt(dx * dx + dy * dy);
       const angle = Math.atan2(dy, dx) * 180 / Math.PI;
       arrow.style.left = note.x + "px";
       arrow.style.top = note.y + "px";
-      arrow.style.width = len + "px";
+      arrow.style.width = length + "px";
       arrow.style.transform = `rotate(${angle}deg)`;
+      return arrow;
     }
 
-    function renderNotesForPage(spread) {
-      document.querySelectorAll(".note, .arrow").forEach(e => e.remove());
-      if (!notes[spread]) return;
+    function renderNotesForSpread() {
+      document.querySelectorAll(".note, .arrow").forEach(el => el.remove());
+      const key = getSpreadKey(currentPage);
+      if (!notes[key]) return;
 
-      notes[spread].forEach(note => {
-        const noteEl = document.createElement("div");
-        noteEl.className = "note";
-        noteEl.style.left = note.x + "px";
-        noteEl.style.top = note.y + "px";
-        noteEl.innerHTML = `
-          <textarea>${note.text}</textarea>
-          <br>
-          <button class="arrow-btn">🔽 Set Arrow Target</button>
+      notes[key].forEach(note => {
+        const noteDiv = document.createElement("div");
+        noteDiv.className = "note";
+        noteDiv.style.left = note.x + "px";
+        noteDiv.style.top = note.y + "px";
+        noteDiv.innerHTML = `
+          <textarea>${note.text}</textarea><br>
+          <button class="targetBtn">🎯 Set Target</button>
         `;
-        const arrow = document.createElement("div");
-        arrow.className = "arrow";
-        updateArrow(note, arrow);
+        const arrow = renderArrow(note, noteDiv);
+        container.appendChild(arrow);
+        container.appendChild(noteDiv);
 
-        noteEl.querySelector("textarea").oninput = e => {
-          note.text = e.target.value;
+        const textArea = noteDiv.querySelector("textarea");
+        textArea.oninput = () => {
+          note.text = textArea.value;
           saveNotes();
         };
 
-        noteEl.querySelector(".arrow-btn").onclick = () => {
-          settingArrow = note;
+        noteDiv.querySelector(".targetBtn").onclick = () => {
+          arrowTargeting = note;
         };
 
-        noteEl.onmousedown = e => {
+        noteDiv.onmousedown = e => {
           if (e.target.tagName === "TEXTAREA" || e.target.tagName === "BUTTON") return;
-          const offsetX = e.clientX - noteEl.offsetLeft;
-          const offsetY = e.clientY - noteEl.offsetTop;
+          const offsetX = e.clientX - noteDiv.offsetLeft;
+          const offsetY = e.clientY - noteDiv.offsetTop;
           document.onmousemove = e => {
             note.x = e.clientX - offsetX;
             note.y = e.clientY - offsetY;
-            noteEl.style.left = note.x + "px";
-            noteEl.style.top = note.y + "px";
-            updateArrow(note, arrow);
+            noteDiv.style.left = note.x + "px";
+            noteDiv.style.top = note.y + "px";
+            const newArrow = renderArrow(note, noteDiv);
+            arrow.style.left = newArrow.style.left;
+            arrow.style.top = newArrow.style.top;
+            arrow.style.width = newArrow.style.width;
+            arrow.style.transform = newArrow.style.transform;
             saveNotes();
           };
           document.onmouseup = () => {
             document.onmousemove = null;
           };
         };
-
-        container.appendChild(arrow);
-        container.appendChild(noteEl);
       });
     }
 
     container.onclick = e => {
-      if (settingArrow) {
-        settingArrow.targetX = e.clientX;
-        settingArrow.targetY = e.clientY;
+      if (arrowTargeting) {
+        arrowTargeting.targetX = e.clientX;
+        arrowTargeting.targetY = e.clientY;
+        arrowTargeting = null;
         saveNotes();
-        settingArrow = null;
-        renderNotesForPage(currentPage);
+        renderNotesForSpread();
+      } else {
+        const rect = leftCanvas.getBoundingClientRect();
+        if (e.clientX < rect.right) {
+          if (currentPage > 1) currentPage -= 2;
+        } else {
+          if (currentPage + 2 <= pdf.numPages) currentPage += 2;
+        }
+        renderSpread();
       }
     };
 
     addNoteBtn.onclick = () => {
-      if (!notes[currentPage]) notes[currentPage] = [];
-      const note = { id: Date.now(), x: 150, y: 150, text: "New note", targetX: 250, targetY: 150 };
-      notes[currentPage].push(note);
+      const key = getSpreadKey(currentPage);
+      if (!notes[key]) notes[key] = [];
+      const note = {
+        id: Date.now(),
+        x: 200,
+        y: 200,
+        text: "New note",
+        targetX: 300,
+        targetY: 200
+      };
+      notes[key].push(note);
       saveNotes();
-      renderNotesForPage(currentPage);
+      renderNotesForSpread();
     };
 
-    fullscreenBtn.onclick = () => {
-      document.documentElement.requestFullscreen();
-    };
-
-    nightModeBtn.onclick = () => {
-      document.body.classList.toggle("night-mode");
-    };
+    fsBtn.onclick = () => document.documentElement.requestFullscreen();
+    nightBtn.onclick = () => document.body.classList.toggle("night");
 
     bookmarkBtn.onclick = () => {
+      const bookmarks = JSON.parse(localStorage.getItem("bookmarks") || "[]");
       if (!bookmarks.includes(currentPage)) {
         bookmarks.push(currentPage);
-        saveBookmarks();
-        alert("Bookmarked page " + currentPage);
+        localStorage.setItem("bookmarks", JSON.stringify(bookmarks));
+        alert("Bookmarked spread starting at page " + currentPage);
       }
     };
 
-    sceneSelector.onchange = () => {
-      const page = parseInt(sceneSelector.value);
-      if (page) {
-        currentPage = page;
-        renderPagePair();
+    sceneJump.onchange = () => {
+      const val = parseInt(sceneJump.value);
+      if (!isNaN(val)) {
+        currentPage = val % 2 === 0 ? val - 1 : val;
+        renderSpread();
       }
     };
 
-    async function renderPagePair() {
-      if (!pdfDoc) return;
-      await pdfDoc.getPage(currentPage).then(page => page.render({ canvasContext: leftCanvas.getContext("2d"), viewport: page.getViewport({ scale: 1.5 }) }).promise);
-      await pdfDoc.getPage(currentPage + 1).then(page => page.render({ canvasContext: rightCanvas.getContext("2d"), viewport: page.getViewport({ scale: 1.5 }) }).promise);
-      renderNotesForPage(currentPage);
+    async function renderPageToCanvas(pageNum, canvas) {
+      const page = await pdf.getPage(pageNum);
+      const context = canvas.getContext('2d');
+      const viewport = page.getViewport({ scale: 1.5 });
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      await page.render({ canvasContext: context, viewport }).promise;
+    }
+
+    async function renderSpread() {
+      if (!pdf) return;
+      await renderPageToCanvas(currentPage, leftCanvas);
+      if (currentPage + 1 <= pdf.numPages) {
+        await renderPageToCanvas(currentPage + 1, rightCanvas);
+      } else {
+        rightCanvas.getContext('2d').clearRect(0, 0, rightCanvas.width, rightCanvas.height);
+      }
+      renderNotesForSpread();
     }
 
     fileInput.onchange = async e => {
-      const reader = new FileReader();
-      reader.onload = async () => { pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(reader.result) }).promise; currentPage = 1; renderPagePair(); };
-      reader.readAsArrayBuffer(e.target.files[0]);
+      const file = e.target.files[0];
+      const arrayBuffer = await file.arrayBuffer();
+      pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      currentPage = 1;
+      renderSpread();
     };
   </script>
 </body>
