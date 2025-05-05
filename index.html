@@ -1,30 +1,37 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Script Viewer</title>
   <style>
     html, body {
-      margin: 0; padding: 0;
-      height: 100%; width: 100%;
-      overflow: hidden;
+      margin: 0;
+      padding: 0;
+      height: 100%;
       background: #111;
-      color: #fff;
+      color: white;
       font-family: sans-serif;
+      overflow: hidden;
     }
+
     body.night {
       background: #eee;
       color: #111;
     }
+
     #toolbar {
       position: absolute;
-      top: 10px; left: 10px; z-index: 10;
-      display: flex; gap: 8px;
-      background: rgba(0,0,0,0.6);
+      top: 10px;
+      left: 10px;
+      z-index: 10;
+      display: flex;
+      gap: 8px;
+      background: rgba(0, 0, 0, 0.6);
       padding: 6px 12px;
       border-radius: 6px;
     }
-    button, select {
+
+    button, select, input[type="file"] {
       padding: 4px 10px;
       border-radius: 4px;
       border: none;
@@ -32,19 +39,29 @@
       color: white;
       cursor: pointer;
     }
-    canvas {
-      background: white;
-      box-shadow: 0 0 20px rgba(0,0,0,0.4);
-      cursor: pointer;
-    }
+
     #pdf-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
       display: flex;
       justify-content: center;
       align-items: center;
       gap: 2vw;
-      height: 100%;
-      position: relative;
+      overflow: hidden;
     }
+
+    canvas {
+      max-height: 100vh;
+      height: 100%;
+      width: auto;
+      background: white;
+      box-shadow: 0 0 20px rgba(0,0,0,0.4);
+      cursor: pointer;
+    }
+
     .note {
       position: absolute;
       background: yellow;
@@ -58,9 +75,13 @@
       cursor: move;
       z-index: 5;
     }
+
     .note textarea {
-      width: 100%; height: 40px; resize: none;
+      width: 100%;
+      height: 40px;
+      resize: none;
     }
+
     .arrow {
       position: absolute;
       height: 2px;
@@ -115,7 +136,7 @@
       localStorage.setItem("notes", JSON.stringify(notes));
     }
 
-    function renderArrow(note, noteDiv) {
+    function renderArrow(note) {
       const arrow = document.createElement("div");
       arrow.className = "arrow";
       const dx = note.targetX - note.x;
@@ -143,7 +164,7 @@
           <textarea>${note.text}</textarea><br>
           <button class="targetBtn">🎯 Set Target</button>
         `;
-        const arrow = renderArrow(note, noteDiv);
+        const arrow = renderArrow(note);
         container.appendChild(arrow);
         container.appendChild(noteDiv);
 
@@ -166,7 +187,7 @@
             note.y = e.clientY - offsetY;
             noteDiv.style.left = note.x + "px";
             noteDiv.style.top = note.y + "px";
-            const newArrow = renderArrow(note, noteDiv);
+            const newArrow = renderArrow(note);
             arrow.style.left = newArrow.style.left;
             arrow.style.top = newArrow.style.top;
             arrow.style.width = newArrow.style.width;
@@ -236,11 +257,12 @@
 
     async function renderPageToCanvas(pageNum, canvas) {
       const page = await pdf.getPage(pageNum);
-      const context = canvas.getContext('2d');
-      const viewport = page.getViewport({ scale: 1.5 });
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      await page.render({ canvasContext: context, viewport }).promise;
+      const viewport = page.getViewport({ scale: 1 });
+      const scale = window.innerHeight / viewport.height;
+      const scaledViewport = page.getViewport({ scale });
+      canvas.width = scaledViewport.width;
+      canvas.height = scaledViewport.height;
+      await page.render({ canvasContext: canvas.getContext("2d"), viewport: scaledViewport }).promise;
     }
 
     async function renderSpread() {
