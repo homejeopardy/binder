@@ -11,6 +11,9 @@
       height: 100%; width: 100%;
       overflow: hidden; font-family: sans-serif;
     }
+    body.night-mode {
+      background: #eee; color: #111;
+    }
     #toolbar {
       position: absolute; top: 10px; left: 10px; z-index: 100;
       background: rgba(0, 0, 0, 0.6);
@@ -19,8 +22,7 @@
     }
     #pdf-container {
       display: flex; justify-content: center; align-items: center;
-      height: 100%; gap: 2vw; perspective: 2000px;
-      position: relative;
+      height: 100%; gap: 2vw; position: relative;
     }
     canvas {
       max-height: 90vh; max-width: 45vw;
@@ -56,8 +58,18 @@
 <body>
   <div id="toolbar">
     <input type="file" id="fileInput" accept="application/pdf"/>
+    <button id="fullscreenBtn">⛶ Fullscreen</button>
+    <button id="nightModeBtn">🌙 Night Mode</button>
+    <button id="bookmarkBtn">🔖 Bookmark</button>
     <button id="addNoteBtn">➕ Add Note</button>
+    <select id="sceneSelector">
+      <option value="">Jump to Scene</option>
+      <option value="1">Act 1, Scene 1</option>
+      <option value="5">Act 1, Scene 2</option>
+      <option value="11">Act 2, Scene 1</option>
+    </select>
   </div>
+
   <div id="pdf-container">
     <canvas id="leftPage"></canvas>
     <canvas id="rightPage"></canvas>
@@ -67,17 +79,26 @@
   <script>
     const container = document.getElementById('pdf-container');
     const fileInput = document.getElementById('fileInput');
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+    const nightModeBtn = document.getElementById('nightModeBtn');
+    const bookmarkBtn = document.getElementById('bookmarkBtn');
+    const addNoteBtn = document.getElementById('addNoteBtn');
+    const sceneSelector = document.getElementById('sceneSelector');
     const leftCanvas = document.getElementById('leftPage');
     const rightCanvas = document.getElementById('rightPage');
-    const addNoteBtn = document.getElementById('addNoteBtn');
 
-    let currentPage = 1;
     let pdfDoc = null;
+    let currentPage = 1;
     let settingArrow = null;
     let notes = JSON.parse(localStorage.getItem("notes") || "{}");
+    let bookmarks = JSON.parse(localStorage.getItem("bookmarks") || "[]");
 
     function saveNotes() {
       localStorage.setItem("notes", JSON.stringify(notes));
+    }
+    
+    function saveBookmarks() {
+      localStorage.setItem("bookmarks", JSON.stringify(bookmarks));
     }
 
     function updateArrow(note, arrow) {
@@ -109,18 +130,15 @@
         arrow.className = "arrow";
         updateArrow(note, arrow);
 
-        // Update text
         noteEl.querySelector("textarea").oninput = e => {
           note.text = e.target.value;
           saveNotes();
         };
 
-        // Set arrow mode
         noteEl.querySelector(".arrow-btn").onclick = () => {
           settingArrow = note;
         };
 
-        // Dragging
         noteEl.onmousedown = e => {
           if (e.target.tagName === "TEXTAREA" || e.target.tagName === "BUTTON") return;
           const offsetX = e.clientX - noteEl.offsetLeft;
@@ -154,57 +172,48 @@
     };
 
     addNoteBtn.onclick = () => {
-      const spread = currentPage;
-      if (!notes[spread]) notes[spread] = [];
-      const note = {
-        id: Date.now(),
-        x: 150, y: 150,
-        text: "New note",
-        targetX: 250,
-        targetY: 150
-      };
-      notes[spread].push(note);
+      if (!notes[currentPage]) notes[currentPage] = [];
+      const note = { id: Date.now(), x: 150, y: 150, text: "New note", targetX: 250, targetY: 150 };
+      notes[currentPage].push(note);
       saveNotes();
-      renderNotesForPage(spread);
+      renderNotesForPage(currentPage);
+    };
+
+    fullscreenBtn.onclick = () => {
+      document.documentElement.requestFullscreen();
+    };
+
+    nightModeBtn.onclick = () => {
+      document.body.classList.toggle("night-mode");
+    };
+
+    bookmarkBtn.onclick = () => {
+      if (!bookmarks.includes(currentPage)) {
+        bookmarks.push(currentPage);
+        saveBookmarks();
+        alert("Bookmarked page " + currentPage);
+      }
+    };
+
+    sceneSelector.onchange = () => {
+      const page = parseInt(sceneSelector.value);
+      if (page) {
+        currentPage = page;
+        renderPagePair();
+      }
     };
 
     async function renderPagePair() {
       if (!pdfDoc) return;
-      const renderPage = async (pageNum, canvas) => {
-        const page = await pdfDoc.getPage(pageNum);
-        const ctx = canvas.getContext("2d");
-        const scale = 1.5;
-        const viewport = page.getViewport({ scale });
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        await page.render({ canvasContext: ctx, viewport }).promise;
-      };
-      await renderPage(currentPage, leftCanvas);
-      await renderPage(currentPage + 1, rightCanvas);
+      await pdfDoc.getPage(currentPage).then(page => page.render({ canvasContext: leftCanvas.getContext("2d"), viewport: page.getViewport({ scale: 1.5 }) }).promise);
+      await pdfDoc.getPage(currentPage + 1).then(page => page.render({ canvasContext: rightCanvas.getContext("2d"), viewport: page.getViewport({ scale: 1.5 }) }).promise);
       renderNotesForPage(currentPage);
     }
 
-    leftCanvas.onclick = () => {
-      currentPage = Math.max(1, currentPage - 2);
-      renderPagePair();
-    };
-    rightCanvas.onclick = () => {
-      currentPage += 2;
-      if (currentPage > pdfDoc.numPages) currentPage = 1;
-      renderPagePair();
-    };
-
     fileInput.onchange = async e => {
-      const file = e.target.files[0];
-      if (!file) return;
       const reader = new FileReader();
-      reader.onload = async () => {
-        const pdfData = new Uint8Array(reader.result);
-        pdfDoc = await pdfjsLib.getDocument({ data: pdfData }).promise;
-        currentPage = 1;
-        renderPagePair();
-      };
-      reader.readAsArrayBuffer(file);
+      reader.onload = async () => { pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(reader.result) }).promise; currentPage = 1; renderPagePair(); };
+      reader.readAsArrayBuffer(e.target.files[0]);
     };
   </script>
 </body>
